@@ -6,6 +6,8 @@ import json
 from typing import Any
 
 import click
+import lastpasslib
+import lastpasslib.secrets
 
 from .exceptions import InvalidLastpassClientParams
 from .lastpass_client import AuthenticatedLastpass, LastpassClient
@@ -24,13 +26,17 @@ def _get_lastpass(ctx: click.Context) -> LastpassClient:
 
 
 def _secret_data(secret: Any, include_password: bool = False) -> dict[str, Any]:
-    fields = {"id": secret.id, "name": secret.name, "url": secret.url}
-    for field in ("notes", "username"):
-        if hasattr(secret, field):
-            fields[field] = getattr(secret, field)
-    if hasattr(secret, "password") and include_password:
-        fields["password"] = secret.password
-    return {key: value for key, value in fields.items() if value is not None}
+    fields = {'type', 'created_datetime', 'is_deleted', 'is_favorite', 'group', 'group_id', 'full_path', 'has_attachment', 'has_been_shared', 'id', 'is_individual_share', 'last_modified_datetime', 'last_password_change_datetime', 'is_secure_note', 'last_touch_datetime', 'name', 'shared_folder', "notes", "username", "mfa_seed", "password"}
+
+    for s in dir(lastpasslib.secrets):
+        fields.update(getattr(s, 'attribute_mapping', []))
+    data = {}
+    for field in fields:
+        data[field] = getattr(secret, field, None)
+
+    if not include_password and "password" in data:
+        del data["password"]
+    return {key: value for key, value in data.items() if value is not None}
 
 
 @click.group(context_settings={"auto_envvar_prefix": "LPASS"})
@@ -90,7 +96,7 @@ def list_entries(
     )
     data = [_secret_data(secret) for secret in secrets]
     if as_json:
-        click.echo(json.dumps(data))
+        click.echo(json.dumps(data, default=str))
         return
     for secret in data:
         click.echo(
