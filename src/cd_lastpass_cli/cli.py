@@ -26,10 +26,32 @@ def _get_lastpass(ctx: click.Context) -> LastpassClient:
 
 
 def _secret_data(secret: Any, include_password: bool = False) -> dict[str, Any]:
-    fields = {'type', 'created_datetime', 'is_deleted', 'is_favorite', 'group', 'group_id', 'full_path', 'has_attachment', 'has_been_shared', 'id', 'is_individual_share', 'last_modified_datetime', 'last_password_change_datetime', 'is_secure_note', 'last_touch_datetime', 'name', 'shared_folder', "notes", "username", "mfa_seed", "password"}
+    fields = {
+        "type",
+        "created_datetime",
+        "is_deleted",
+        "is_favorite",
+        "group",
+        "group_id",
+        "full_path",
+        "has_attachment",
+        "has_been_shared",
+        "id",
+        "is_individual_share",
+        "last_modified_datetime",
+        "last_password_change_datetime",
+        "is_secure_note",
+        "last_touch_datetime",
+        "name",
+        "shared_folder",
+        "notes",
+        "username",
+        "mfa_seed",
+        "password",
+    }
 
     for s in dir(lastpasslib.secrets):
-        fields.update(getattr(s, 'attribute_mapping', []))
+        fields.update(getattr(s, "attribute_mapping", []))
     data = {}
     for field in fields:
         data[field] = getattr(secret, field, None)
@@ -121,7 +143,7 @@ def show(ctx: click.Context, name: str, include_password: bool, as_json: bool) -
         raise click.ClickException(f"Entry not found: {name}")
     data = _secret_data(secret, include_password)
     if as_json:
-        click.echo(json.dumps(data))
+        click.echo(json.dumps(data, default=str))
         return
     for key, value in data.items():
         click.echo(f"{key}: {value}")
