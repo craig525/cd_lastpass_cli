@@ -13,6 +13,7 @@ import requests
 from loguru import logger
 
 from .exceptions import InvalidLastpassClientParams, NoSavedCredentials
+from .secret_data import process_secret_data, secret_data
 from .vault import Vault
 
 
@@ -67,9 +68,7 @@ class Lastpass(AuthenticatedLastpass):
         lastpass._shared_folders_data_ = None
         lastpass._folders = None
         lastpass._decrypted_vault = None
-        lastpass._vault = Vault(
-            lastpass_instance=lastpass, key=vault_key, hash=vault_hash
-        )
+        lastpass._vault = Vault(lastpass, "", key=vault_key, hash=vault_hash)
         return lastpass
 
 
@@ -158,3 +157,36 @@ class LastpassClient:
         except (OSError, ValueError, pickle.UnpicklingError, EOFError, TypeError):
             logger.exception("Error loading credentials")
             raise NoSavedCredentials from None
+
+    def get_secrets(
+        self, include_password: bool = False, filter_=None
+    ) -> list[dict[str, Any]]:
+        return [
+            process_secret_data(secret_data(s, include_password=include_password))
+            for s in self.lastpass.get_secrets(filter_=filter_)
+        ]
+
+    def get_secrets_by_group(
+        self, group_name, include_password: bool = False, filter_=None
+    ) -> list[dict[str, Any]]:
+        return [
+            process_secret_data(secret_data(s, include_password=include_password))
+            for s in self.lastpass.get_secrets_by_group(
+                group_name=group_name, filter_=filter_
+            )
+        ]
+
+    def get_secret_by_name(self, name, include_password: bool = False):
+        return process_secret_data(
+            secret_data(
+                self.lastpass.get_secret_by_name(name),
+                include_password=include_password,
+            )
+        )
+
+    def get_secret_by_id(self, id_, include_password: bool = False):
+        return process_secret_data(
+            secret_data(
+                self.lastpass.get_secret_by_id(id_), include_password=include_password
+            )
+        )

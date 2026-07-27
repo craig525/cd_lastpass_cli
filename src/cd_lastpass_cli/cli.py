@@ -3,11 +3,8 @@
 from __future__ import annotations
 
 import json
-from typing import Any
 
 import click
-import lastpasslib
-import lastpasslib.secrets
 
 from .exceptions import InvalidLastpassClientParams
 from .lastpass_client import AuthenticatedLastpass, LastpassClient
@@ -23,42 +20,6 @@ def _get_lastpass(ctx: click.Context) -> LastpassClient:
         except InvalidLastpassClientParams as error:
             raise click.UsageError("No saved credentials; run login first.") from error
     return ctx.meta["lastpass"]
-
-
-def _secret_data(secret: Any, include_password: bool = False) -> dict[str, Any]:
-    fields = {
-        "type",
-        "created_datetime",
-        "is_deleted",
-        "is_favorite",
-        "group",
-        "group_id",
-        "full_path",
-        "has_attachment",
-        "has_been_shared",
-        "id",
-        "is_individual_share",
-        "last_modified_datetime",
-        "last_password_change_datetime",
-        "is_secure_note",
-        "last_touch_datetime",
-        "name",
-        "shared_folder",
-        "notes",
-        "username",
-        "mfa_seed",
-        "password",
-    }
-
-    for s in dir(lastpasslib.secrets):
-        fields.update(getattr(s, "attribute_mapping", []))
-    data = {}
-    for field in fields:
-        data[field] = getattr(secret, field, None)
-
-    if not include_password and "password" in data:
-        del data["password"]
-    return {key: value for key, value in data.items() if value is not None}
 
 
 @click.group(context_settings={"auto_envvar_prefix": "LPASS"})
@@ -111,16 +72,11 @@ def list_entries(
 ) -> None:
     """List entries in the vault."""
     lastpass = _get_lastpass(ctx)
-    secrets = (
-        lastpass.lastpass.get_secrets_by_group(group)
-        if group
-        else lastpass.lastpass.get_secrets()
-    )
-    data = [_secret_data(secret) for secret in secrets]
+    secrets = lastpass.get_secrets_by_group(group) if group else lastpass.get_secrets()
     if as_json:
-        click.echo(json.dumps(data, default=str))
+        click.echo(json.dumps(secrets, default=str))
         return
-    for secret in data:
+    for secret in secrets:
         click.echo(
             secret["name"] if not long_format else f"{secret['id']}\t{secret['name']}"
         )
@@ -136,16 +92,15 @@ def list_entries(
 def show(ctx: click.Context, name: str, include_password: bool, as_json: bool) -> None:
     """Show an entry by name or ID."""
     lastpass = _get_lastpass(ctx)
-    secret = lastpass.lastpass.get_secret_by_name(
-        name
-    ) or lastpass.lastpass.get_secret_by_id(name)
+    secret = lastpass.get_secret_by_name(
+        name, include_password=include_password
+    ) or lastpass.get_secret_by_id(name, include_password=include_password)
     if secret is None:
         raise click.ClickException(f"Entry not found: {name}")
-    data = _secret_data(secret, include_password)
     if as_json:
-        click.echo(json.dumps(data, default=str))
+        click.echo(json.dumps(secret, sort_keys=True, default=str))
         return
-    for key, value in data.items():
+    for key, value in secret.items():
         click.echo(f"{key}: {value}")
 
 
