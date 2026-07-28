@@ -303,6 +303,66 @@ def duplicate(ctx: click.Context, name_or_id: str, name: str | None) -> None:
     click.echo(duplicate_name)
 
 
+@cli.command("edit")
+@click.argument("name_or_id")
+@click.option("--name")
+@click.option("--folder", "folder_path")
+@click.option("--url")
+@click.option("--username")
+@click.option("--password", hide_input=True)
+@click.option("--totp")
+@click.option("--notes")
+@click.option("--favorite/--no-favorite", default=None)
+@click.option(
+    "--field",
+    "field_values",
+    multiple=True,
+    metavar="LABEL=VALUE",
+    help="Set a secure-note field; may be repeated.",
+)
+@click.pass_context
+def edit(
+    ctx: click.Context,
+    name_or_id: str,
+    name: str | None,
+    folder_path: str | None,
+    url: str | None,
+    username: str | None,
+    password: str | None,
+    totp: str | None,
+    notes: str | None,
+    favorite: bool | None,
+    field_values: tuple[str, ...],
+) -> None:
+    """Edit an entry by name or ID."""
+    updates: dict[str, Any] = {
+        key: _read_at_value(value)
+        for key, value in (
+            ("name", name),
+            ("folder_path", folder_path),
+            ("url", url),
+            ("username", username),
+            ("password", password),
+            ("totp", totp),
+            ("notes", notes),
+        )
+        if value is not None
+    }
+    if favorite is not None:
+        updates["favorite"] = favorite
+    fields = {}
+    for field_value in field_values:
+        label, separator, value = field_value.partition("=")
+        if not separator or not label:
+            raise click.BadParameter("must use LABEL=VALUE", param_hint="--field")
+        fields[label] = _read_at_value(value)
+    if fields:
+        updates["fields"] = fields
+    if not _get_lastpass(ctx).edit_secret(name_or_id, **updates):
+        raise click.ClickException(f"Could not edit entry: {name_or_id}")
+    click.echo(name or name_or_id)
+
+
 def _command_name(value: str) -> str:
     value = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1-\2", value)
     value = re.sub(r"([a-z0-9])([A-Z])", r"\1-\2", value)

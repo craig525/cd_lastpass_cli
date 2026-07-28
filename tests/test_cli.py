@@ -422,6 +422,53 @@ def test_duplicate_reports_missing_entry(monkeypatch) -> None:
     assert "Entry not found: Missing" in result.output
 
 
+def test_edit_entry_passes_only_supplied_fields(monkeypatch) -> None:
+    class FakeClient:
+        def edit_secret(self, name_or_id, **updates):
+            assert name_or_id == "Production SSH"
+            assert updates == {"password": "new secret", "favorite": True}
+            return True
+
+    monkeypatch.setattr(cli_module, "_get_lastpass", lambda ctx: FakeClient())
+    result = CliRunner().invoke(
+        cli,
+        ["edit", "Production SSH", "--password", "new secret", "--favorite"],
+    )
+
+    assert result.exit_code == 0
+    assert result.output == "Production SSH\n"
+
+
+def test_edit_entry_supports_secure_note_fields(monkeypatch, tmp_path: Path) -> None:
+    class FakeClient:
+        def edit_secret(self, name_or_id, **updates):
+            assert name_or_id == "Recovery"
+            assert updates == {"fields": {"Notes": "backup codes\n"}}
+            return True
+
+    note_path = tmp_path / "note.txt"
+    note_path.write_text("backup codes\n", encoding="utf-8")
+    monkeypatch.setattr(cli_module, "_get_lastpass", lambda ctx: FakeClient())
+    result = CliRunner().invoke(
+        cli, ["edit", "Recovery", "--field", f"Notes=@{note_path}"]
+    )
+
+    assert result.exit_code == 0
+    assert result.output == "Recovery\n"
+
+
+def test_edit_reports_failure(monkeypatch) -> None:
+    class FakeClient:
+        def edit_secret(self, name_or_id, **updates):
+            return False
+
+    monkeypatch.setattr(cli_module, "_get_lastpass", lambda ctx: FakeClient())
+    result = CliRunner().invoke(cli, ["edit", "Missing"])
+
+    assert result.exit_code != 0
+    assert "Could not edit entry: Missing" in result.output
+
+
 def test_status_accepts_credentials_from_environment(monkeypatch) -> None:
     class FakeLastpass:
         def __init__(self, username, password, mfa):

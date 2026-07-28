@@ -1,4 +1,4 @@
-from typing import cast
+from typing import ClassVar, cast
 from unittest.mock import Mock
 
 import lastpasslib.secrets
@@ -225,9 +225,9 @@ def test_duplicate_secure_note_preserves_note_fields() -> None:
         full_path = "Personal"
         is_favorite = False
         notes = "Notes"
-        attribute_mapping = {"Username": "username", "Notes": "notes"}
+        attribute_mapping: ClassVar = {"Username": "username", "Notes": "notes"}
         username = "user"
-        _data = {"note_type": "Email Account"}
+        _data: ClassVar = {"note_type": "Email Account"}
 
     class Lastpass:
         def get_secret_by_name(self, name):
@@ -247,5 +247,83 @@ def test_duplicate_secure_note_preserves_note_fields() -> None:
         note_type="Email Account",
         folder_path="Personal",
         fields={"Username": "user", "Notes": "Notes"},
+        favorite=False,
+    )
+
+
+def test_edit_password_creates_updated_entry_then_deletes_original() -> None:
+    class Secret(lastpasslib.secrets.Password):
+        name = "Production"
+        full_path = "Personal"
+        url = "https://example.com"
+        username = "user"
+        password = "old secret"
+        mfa_seed = "seed"
+        notes = "notes"
+        is_password_protected = False
+        auto_login = False
+        never_autofill = True
+        is_favorite = False
+
+        def delete(self):
+            return True
+
+        def __init__(self):
+            pass
+
+    class Lastpass:
+        def get_secret_by_name(self, name):
+            return Secret()
+
+        def get_secret_by_id(self, secret_id):
+            raise AssertionError("ID lookup should not be needed")
+
+    client = LastpassClient.__new__(LastpassClient)
+    client.lastpass = cast(LastpassType, Lastpass())
+    client.create_password = Mock(return_value=True)
+
+    assert client.edit_secret("Production", password="new secret") is True
+    client.create_password.assert_called_once_with(
+        name="Production",
+        folder_path="Personal",
+        favorite=False,
+        url="https://example.com",
+        username="user",
+        password="new secret",
+        totp="seed",
+        notes="notes",
+    )
+
+
+def test_edit_secure_note_preserves_type_and_updates_fields() -> None:
+    class Secret:
+        name = "Recovery"
+        full_path = "Personal"
+        is_favorite = False
+        notes = "old notes"
+        attribute_mapping: ClassVar = {"Username": "username", "Notes": "notes"}
+        username = "user"
+        _data: ClassVar = {"note_type": "Email Account"}
+
+        def delete(self):
+            return True
+
+    class Lastpass:
+        def get_secret_by_name(self, name):
+            return Secret()
+
+        def get_secret_by_id(self, secret_id):
+            return None
+
+    client = LastpassClient.__new__(LastpassClient)
+    client.lastpass = cast(LastpassType, Lastpass())
+    client.create_typed_secure_note = Mock(return_value=True)
+
+    assert client.edit_secret("Recovery", fields={"Username": "new user"}) is True
+    client.create_typed_secure_note.assert_called_once_with(
+        name="Recovery",
+        note_type="Email Account",
+        folder_path="Personal",
+        fields={"Username": "new user", "Notes": "old notes"},
         favorite=False,
     )

@@ -537,6 +537,53 @@ class LastpassClient:
             favorite=secret.is_favorite,
         )
 
+    def edit_secret(self, name_or_id: str, **updates: Any) -> bool:
+        secret = self._get_secret(name_or_id)
+        if secret is None:
+            return False
+        name = updates.pop("name", None) or secret.name
+        folder_path = updates.pop("folder_path", None)
+        if folder_path is None:
+            folder_path = secret.full_path or None
+        favorite = updates.pop("favorite", None)
+        if favorite is None:
+            favorite = secret.is_favorite
+        if isinstance(secret, lastpasslib.secrets.Password):
+            fields = {
+                "url": secret.url,
+                "username": secret.username,
+                "password": secret.password,
+                "totp": secret.mfa_seed,
+                "notes": secret.notes,
+            }
+            fields.update(updates)
+            created = self.create_password(
+                name=name,
+                folder_path=folder_path,
+                favorite=favorite,
+                **fields,
+            )
+        else:
+            note_type = getattr(secret, "_data", {}).get("note_type") or "Generic"
+            mapping = getattr(secret, "attribute_mapping", {})
+            fields = {
+                label: getattr(secret, attribute, None)
+                for label, attribute in mapping.items()
+            }
+            if not mapping:
+                fields["Notes"] = secret.notes
+            if "notes" in updates:
+                fields["Notes"] = updates.pop("notes")
+            fields.update(updates.pop("fields", {}))
+            created = self.create_typed_secure_note(
+                name=name,
+                note_type=note_type,
+                folder_path=folder_path,
+                fields=fields,
+                favorite=favorite,
+            )
+        return bool(created and secret.delete())
+
     def _get_secret(self, name_or_id: str):
         secret = self.lastpass.get_secret_by_name(name_or_id)
         return secret or self.lastpass.get_secret_by_id(name_or_id)
