@@ -83,6 +83,14 @@ cd-lastpass-cli ls --long
 cd-lastpass-cli ls --json
 ```
 
+Export vault entries to CSV. Passwords are omitted unless `--password` is
+explicitly provided:
+
+```sh
+cd-lastpass-cli export vault.csv
+cd-lastpass-cli export personal.csv --group Personal --password
+```
+
 Show an entry by name or ID:
 
 ```sh

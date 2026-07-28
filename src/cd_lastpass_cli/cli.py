@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import json
 import re
 import secrets
@@ -143,6 +144,29 @@ def list_entries(
         click.echo(
             secret["name"] if not long_format else f"{secret['id']}\t{secret['name']}"
         )
+
+
+@cli.command("export")
+@click.argument("path", type=click.Path(dir_okay=False, writable=True, path_type=Path))
+@click.option("--group", help="Only export entries in this group.")
+@click.option("--password", "include_password", is_flag=True, help="Include passwords.")
+@click.pass_context
+def export_entries(
+    ctx: click.Context, path: Path, group: str | None, include_password: bool
+) -> None:
+    """Export vault entries to a CSV file."""
+    lastpass = _get_lastpass(ctx)
+    secrets = (
+        lastpass.get_secrets_by_group(group, include_password=include_password)
+        if group
+        else lastpass.get_secrets(include_password=include_password)
+    )
+    fieldnames = sorted({field for secret in secrets for field in secret})
+    with path.open("w", newline="", encoding="utf-8") as csv_file:
+        writer = csv.DictWriter(csv_file, fieldnames=fieldnames, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(secrets)
+    click.echo(path)
 
 
 @cli.command("show")

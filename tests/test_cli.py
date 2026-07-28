@@ -1,3 +1,4 @@
+import csv
 from importlib import import_module
 from pathlib import Path
 
@@ -85,6 +86,55 @@ def test_sync_reports_failure(monkeypatch) -> None:
 
     assert result.exit_code != 0
     assert "Could not synchronize vault" in result.output
+
+
+def test_export_writes_csv_without_passwords_by_default(
+    monkeypatch, tmp_path: Path
+) -> None:
+    class FakeClient:
+        def get_secrets(self, include_password=False):
+            assert include_password is False
+            return [
+                {"name": "Example", "username": "user"},
+                {"name": "Note", "notes": "line 1\nline 2"},
+            ]
+
+    monkeypatch.setattr(cli_module, "_get_lastpass", lambda ctx: FakeClient())
+    export_path = tmp_path / "vault.csv"
+
+    result = CliRunner().invoke(cli, ["export", str(export_path)])
+
+    assert result.exit_code == 0
+    assert result.output == f"{export_path}\n"
+    with export_path.open(newline="", encoding="utf-8") as csv_file:
+        rows = list(csv.DictReader(csv_file))
+    assert rows == [
+        {"name": "Example", "notes": "", "username": "user"},
+        {"name": "Note", "notes": "line 1\nline 2", "username": ""},
+    ]
+
+
+def test_export_can_include_passwords_and_filter_by_group(
+    monkeypatch, tmp_path: Path
+) -> None:
+    class FakeClient:
+        def get_secrets_by_group(self, group, include_password=False):
+            assert group == "Personal"
+            assert include_password is True
+            return [{"name": "Example", "password": "secret"}]
+
+    monkeypatch.setattr(cli_module, "_get_lastpass", lambda ctx: FakeClient())
+    export_path = tmp_path / "personal.csv"
+
+    result = CliRunner().invoke(
+        cli, ["export", str(export_path), "--group", "Personal", "--password"]
+    )
+
+    assert result.exit_code == 0
+    with export_path.open(newline="", encoding="utf-8") as csv_file:
+        assert list(csv.DictReader(csv_file)) == [
+            {"name": "Example", "password": "secret"}
+        ]
 
 
 def test_logout_removes_saved_credentials(monkeypatch, tmp_path: Path) -> None:
