@@ -116,6 +116,15 @@ def status(ctx: click.Context) -> None:
     click.echo("Logged in")
 
 
+@cli.command("sync")
+@click.pass_context
+def sync(ctx: click.Context) -> None:
+    """Synchronize the local vault with LastPass."""
+    if not _get_lastpass(ctx).sync():
+        raise click.ClickException("Could not synchronize vault.")
+    click.echo("Synchronized")
+
+
 @cli.command("ls")
 @click.option("--group", help="Only list entries in this group.")
 @click.option("--long", "long_format", is_flag=True, help="Show entry details.")

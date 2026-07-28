@@ -63,6 +63,12 @@ Check the saved session:
 cd-lastpass-cli status
 ```
 
+Synchronize the local vault with LastPass:
+
+```sh
+cd-lastpass-cli sync
+```
+
 List vault entries by name:
 
 ```sh

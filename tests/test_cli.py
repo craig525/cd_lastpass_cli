@@ -63,6 +63,30 @@ def test_missing_credentials_is_reported() -> None:
     assert "run login" in result.output
 
 
+def test_sync_refreshes_vault(monkeypatch) -> None:
+    class FakeClient:
+        def sync(self):
+            return True
+
+    monkeypatch.setattr(cli_module, "_get_lastpass", lambda ctx: FakeClient())
+    result = CliRunner().invoke(cli, ["sync"])
+
+    assert result.exit_code == 0
+    assert result.output == "Synchronized\n"
+
+
+def test_sync_reports_failure(monkeypatch) -> None:
+    class FakeClient:
+        def sync(self):
+            return False
+
+    monkeypatch.setattr(cli_module, "_get_lastpass", lambda ctx: FakeClient())
+    result = CliRunner().invoke(cli, ["sync"])
+
+    assert result.exit_code != 0
+    assert "Could not synchronize vault" in result.output
+
+
 def test_logout_removes_saved_credentials(monkeypatch, tmp_path: Path) -> None:
     credential_files = [
         "_response_data",

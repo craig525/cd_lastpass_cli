@@ -331,6 +331,12 @@ class LastpassClient:
             )
         ]
 
+    def sync(self) -> bool:
+        result = self.lastpass.refresh()
+        if result:
+            self._save_credentials(self.lastpass)
+        return result
+
     def get_secret_by_name(self, name, include_password: bool = False):
         return process_secret_data(
             secret_data(

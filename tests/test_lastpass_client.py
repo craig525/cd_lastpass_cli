@@ -26,6 +26,30 @@ def test_delete_secret_resolves_by_name_before_id() -> None:
     assert client.delete_secret("Production SSH") is True
 
 
+def test_sync_refreshes_lastpass_and_saves_credentials() -> None:
+    client = LastpassClient.__new__(LastpassClient)
+    client.lastpass = Mock()
+    client.lastpass.refresh.return_value = True
+    client._save_credentials = Mock()
+
+    assert client.sync() is True
+
+    client.lastpass.refresh.assert_called_once_with()
+    client._save_credentials.assert_called_once_with(client.lastpass)
+
+
+def test_sync_does_not_save_credentials_when_refresh_fails() -> None:
+    client = LastpassClient.__new__(LastpassClient)
+    client.lastpass = Mock()
+    client.lastpass.refresh.return_value = False
+    client._save_credentials = Mock()
+
+    assert client.sync() is False
+
+    client.lastpass.refresh.assert_called_once_with()
+    client._save_credentials.assert_not_called()
+
+
 def test_delete_secret_falls_back_to_id() -> None:
     class Secret:
         def delete(self):
