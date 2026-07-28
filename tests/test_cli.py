@@ -63,6 +63,56 @@ def test_missing_credentials_is_reported() -> None:
     assert "run login" in result.output
 
 
+def test_logout_removes_saved_credentials(monkeypatch, tmp_path: Path) -> None:
+    credential_files = [
+        "_response_data",
+        "_vault_hash",
+        "_vault_key",
+        "_session",
+        "_username",
+    ]
+    for filename in credential_files:
+        (tmp_path / filename).write_text("credential")
+    log_path = tmp_path / "cd-lastpass-cli.log"
+    log_path.write_text("log")
+    monkeypatch.setenv("LPASS_HOME", str(tmp_path))
+
+    result = CliRunner().invoke(cli, ["logout"])
+
+    assert result.exit_code == 0
+    assert result.output == "Logged out\n"
+    assert all(not (tmp_path / filename).exists() for filename in credential_files)
+    assert log_path.exists()
+
+
+def test_logout_is_idempotent(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("LPASS_HOME", str(tmp_path))
+
+    result = CliRunner().invoke(cli, ["logout"])
+
+    assert result.exit_code == 0
+    assert result.output == "Logged out\n"
+
+
+def test_generate_password_does_not_require_credentials() -> None:
+    result = CliRunner().invoke(cli, ["generate"])
+
+    password = result.output.strip()
+    assert result.exit_code == 0
+    assert len(password) == 20
+    assert any(character.islower() for character in password)
+    assert any(character.isupper() for character in password)
+    assert any(character.isdigit() for character in password)
+    assert any(not character.isalnum() for character in password)
+
+
+def test_generate_password_accepts_length() -> None:
+    result = CliRunner().invoke(cli, ["generate", "--length", "32"])
+
+    assert result.exit_code == 0
+    assert len(result.output.strip()) == 32
+
+
 def test_delete_requires_confirmation_and_deletes_entry(monkeypatch) -> None:
     class FakeClient:
         def delete_secret(self, name_or_id):
@@ -101,6 +151,35 @@ def test_delete_reports_missing_entry(monkeypatch) -> None:
 
     assert result.exit_code != 0
     assert "Entry not found: Missing" in result.output
+
+
+def test_move_entry_to_folder(monkeypatch) -> None:
+    class FakeClient:
+        def move_secret(self, name_or_id, folder_path):
+            assert name_or_id == "Production SSH"
+            assert folder_path == r"Personal\Infrastructure"
+            return True
+
+    monkeypatch.setattr(cli_module, "_get_lastpass", lambda ctx: FakeClient())
+    result = CliRunner().invoke(
+        cli,
+        ["move", "Production SSH", "--folder", r"Personal\Infrastructure"],
+    )
+
+    assert result.exit_code == 0
+    assert result.output == "Production SSH\n"
+
+
+def test_move_reports_failure(monkeypatch) -> None:
+    class FakeClient:
+        def move_secret(self, name_or_id, folder_path):
+            return False
+
+    monkeypatch.setattr(cli_module, "_get_lastpass", lambda ctx: FakeClient())
+    result = CliRunner().invoke(cli, ["move", "Missing", "--folder", "Archive"])
+
+    assert result.exit_code != 0
+    assert "Could not move entry: Missing" in result.output
 
 
 def test_status_accepts_credentials_from_environment(monkeypatch) -> None:

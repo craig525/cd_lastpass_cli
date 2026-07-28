@@ -36,6 +36,19 @@ LPASS_USERNAME=user@example.com LPASS_PASSWORD=secret LPASS_MFA=123456 \
 
 The MFA value is used only during login and is not saved.
 
+Remove the saved session and vault keys from this machine:
+
+```sh
+cd-lastpass-cli logout
+```
+
+Generate a secure random password:
+
+```sh
+cd-lastpass-cli generate
+cd-lastpass-cli generate --length 32
+```
+
 ### Commands
 
 Check the saved session:
@@ -71,6 +84,12 @@ provided:
 ```sh
 cd-lastpass-cli delete "Example Login"
 cd-lastpass-cli delete 123456789 --yes
+```
+
+Move an entry by name or ID to a different folder:
+
+```sh
+cd-lastpass-cli move "Example Login" --folder="Personal\Infrastructure"
 ```
 
 Create entries with dynamically generated type-specific options. The available

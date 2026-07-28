@@ -156,6 +156,14 @@ class Lastpass(AuthenticatedLastpass):
 
 
 class LastpassClient:
+    _CREDENTIAL_FILES = (
+        "_response_data",
+        "_vault_hash",
+        "_vault_key",
+        "_session",
+        "_username",
+    )
+
     def __init__(
         self,
         username=None,
@@ -192,6 +200,16 @@ class LastpassClient:
         path.mkdir(mode=0o700, parents=True, exist_ok=True)
         path.chmod(0o700)
         return path
+
+    @classmethod
+    def logout(cls, environ: Mapping[str, str] | None = None) -> None:
+        environ = os.environ if environ is None else environ
+        config_home = Path(environ.get("LPASS_HOME", "~/.lastpass-cli")).expanduser()
+        for filename in cls._CREDENTIAL_FILES:
+            try:
+                (config_home / filename).unlink()
+            except FileNotFoundError:
+                continue
 
     def _save_credentials(self, lastpass) -> None:
         files = {
@@ -281,6 +299,14 @@ class LastpassClient:
         if secret is None:
             return False
         return secret.delete()
+
+    def move_secret(self, name_or_id: str, folder_path: str) -> bool:
+        secret = self.lastpass.get_secret_by_name(name_or_id)
+        if secret is None:
+            secret = self.lastpass.get_secret_by_id(name_or_id)
+        if secret is None:
+            return False
+        return secret.move_to_folder(folder_path)
 
     def create_password(self, **fields: Any) -> bool:
         return cast(Lastpass, self.lastpass).create_password(**fields)

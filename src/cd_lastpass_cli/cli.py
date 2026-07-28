@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import re
+import secrets
+import string
 from pathlib import Path
 from typing import Any
 
@@ -57,6 +59,36 @@ def login(username: str, password: str | None, mfa: str | None) -> None:
         mfa = click.prompt("MFA", default="", show_default=False)
     LastpassClient(username, password, mfa, authenticator=Lastpass)
     click.echo("Logged in")
+
+
+@cli.command("logout")
+def logout() -> None:
+    """Remove saved LastPass credentials from this machine."""
+    LastpassClient.logout()
+    click.echo("Logged out")
+
+
+@cli.command("generate")
+@click.option(
+    "--length",
+    type=click.IntRange(min=4, max=256),
+    default=20,
+    show_default=True,
+    help="Password length.",
+)
+def generate(length: int) -> None:
+    """Generate a secure random password."""
+    character_sets = (
+        string.ascii_lowercase,
+        string.ascii_uppercase,
+        string.digits,
+        string.punctuation,
+    )
+    password = [secrets.choice(characters) for characters in character_sets]
+    alphabet = "".join(character_sets)
+    password.extend(secrets.choice(alphabet) for _ in range(length - len(password)))
+    secrets.SystemRandom().shuffle(password)
+    click.echo("".join(password))
 
 
 @cli.command("status")
@@ -119,6 +151,17 @@ def delete(ctx: click.Context, name_or_id: str) -> None:
     """Delete an entry by name or ID."""
     if not _get_lastpass(ctx).delete_secret(name_or_id):
         raise click.ClickException(f"Entry not found: {name_or_id}")
+    click.echo(name_or_id)
+
+
+@cli.command("move")
+@click.argument("name_or_id")
+@click.option("--folder", "folder_path", required=True, help="Destination folder path.")
+@click.pass_context
+def move(ctx: click.Context, name_or_id: str, folder_path: str) -> None:
+    """Move an entry to a different folder."""
+    if not _get_lastpass(ctx).move_secret(name_or_id, folder_path):
+        raise click.ClickException(f"Could not move entry: {name_or_id}")
     click.echo(name_or_id)
 
 
