@@ -476,6 +476,9 @@ def test_status_accepts_credentials_from_environment(monkeypatch) -> None:
             assert (username, password, mfa) == ("user@example.com", "secret", "123456")
 
     monkeypatch.setattr(cli_module, "Lastpass", FakeLastpass)
+    monkeypatch.setattr(
+        cli_module.LastpassClient, "_save_credentials", lambda *args: None
+    )
     result = CliRunner().invoke(
         cli_module.cli,
         ["login"],
