@@ -63,6 +63,46 @@ def test_missing_credentials_is_reported() -> None:
     assert "run login" in result.output
 
 
+def test_delete_requires_confirmation_and_deletes_entry(monkeypatch) -> None:
+    class FakeClient:
+        def delete_secret(self, name_or_id):
+            assert name_or_id == "Production SSH"
+            return True
+
+    monkeypatch.setattr(cli_module, "_get_lastpass", lambda ctx: FakeClient())
+    result = CliRunner().invoke(cli, ["delete", "Production SSH"], input="y\n")
+
+    assert result.exit_code == 0
+    assert result.output == (
+        "Are you sure you want to delete this entry? [y/N]: y\nProduction SSH\n"
+    )
+
+
+def test_delete_can_skip_confirmation(monkeypatch) -> None:
+    class FakeClient:
+        def delete_secret(self, name_or_id):
+            assert name_or_id == "123"
+            return True
+
+    monkeypatch.setattr(cli_module, "_get_lastpass", lambda ctx: FakeClient())
+    result = CliRunner().invoke(cli, ["delete", "123", "--yes"])
+
+    assert result.exit_code == 0
+    assert result.output == "123\n"
+
+
+def test_delete_reports_missing_entry(monkeypatch) -> None:
+    class FakeClient:
+        def delete_secret(self, name_or_id):
+            return False
+
+    monkeypatch.setattr(cli_module, "_get_lastpass", lambda ctx: FakeClient())
+    result = CliRunner().invoke(cli, ["delete", "Missing", "--yes"])
+
+    assert result.exit_code != 0
+    assert "Entry not found: Missing" in result.output
+
+
 def test_status_accepts_credentials_from_environment(monkeypatch) -> None:
     class FakeLastpass:
         def __init__(self, username, password, mfa):

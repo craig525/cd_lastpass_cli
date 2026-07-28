@@ -109,6 +109,19 @@ def show(ctx: click.Context, name: str, include_password: bool, as_json: bool) -
         click.echo(f"{key}: {value}")
 
 
+@cli.command("delete")
+@click.argument("name_or_id")
+@click.confirmation_option(
+    "--yes", prompt="Are you sure you want to delete this entry?"
+)
+@click.pass_context
+def delete(ctx: click.Context, name_or_id: str) -> None:
+    """Delete an entry by name or ID."""
+    if not _get_lastpass(ctx).delete_secret(name_or_id):
+        raise click.ClickException(f"Entry not found: {name_or_id}")
+    click.echo(name_or_id)
+
+
 def _command_name(value: str) -> str:
     value = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1-\2", value)
     value = re.sub(r"([a-z0-9])([A-Z])", r"\1-\2", value)

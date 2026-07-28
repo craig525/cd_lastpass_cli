@@ -65,6 +65,14 @@ cd-lastpass-cli show "Example Login"
 cd-lastpass-cli show 123456789 --json
 ```
 
+Delete an entry by name or ID. Deletion requires confirmation unless `--yes` is
+provided:
+
+```sh
+cd-lastpass-cli delete "Example Login"
+cd-lastpass-cli delete 123456789 --yes
+```
+
 Create entries with dynamically generated type-specific options. The available
 types and fields come from `lastpasslib`:
 

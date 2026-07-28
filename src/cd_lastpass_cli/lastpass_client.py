@@ -274,6 +274,14 @@ class LastpassClient:
             )
         )
 
+    def delete_secret(self, name_or_id: str) -> bool:
+        secret = self.lastpass.get_secret_by_name(name_or_id)
+        if secret is None:
+            secret = self.lastpass.get_secret_by_id(name_or_id)
+        if secret is None:
+            return False
+        return secret.delete()
+
     def create_password(self, **fields: Any) -> bool:
         return cast(Lastpass, self.lastpass).create_password(**fields)
 
