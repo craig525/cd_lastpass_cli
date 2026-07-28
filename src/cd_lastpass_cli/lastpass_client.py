@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
 import logging
 import os
+import re
 import time
 import urllib.parse
+import xml.etree.ElementTree as ET
 from collections.abc import Mapping
 from functools import partial
 from pathlib import Path
@@ -16,6 +20,8 @@ import lastpasslib.encryption
 import lastpasslib.lastpasslib
 import lastpasslib.secrets
 import requests
+from Crypto.Cipher import PKCS1_OAEP
+from Crypto.PublicKey import RSA
 from loguru import logger
 
 from .exceptions import InvalidLastpassClientParams, NoSavedCredentials
@@ -29,6 +35,42 @@ class SavedCredentials(NamedTuple):
     session: requests.Session
     vault_key: bytes
     vault_hash: bytes
+
+
+class PasswordChangeInfo(NamedTuple):
+    token: str
+    reencrypt_id: str
+    private_key: str
+    fields: list[tuple[str, bool]]
+    recovery_keys: list[tuple[str, str]]
+
+
+def _decrypt_password_change_value(value: str, key: bytes) -> str:
+    raw_value = urllib.parse.unquote(value)
+    iv, ciphertext = raw_value[1:].split("|", 1)
+    decrypted = lastpasslib.encryption.EncryptManager.decrypt_aes256_cbc(
+        base64.b64decode(iv), base64.b64decode(ciphertext), key
+    )
+    return decrypted.decode()
+
+
+def _encrypt_password_change_value(value: str, key: bytes) -> str:
+    return lastpasslib.encryption.EncryptManager.encrypt_and_encode_payload(
+        cast(Any, key), value
+    )
+
+
+def _password_hash(username: str, password: str, iterations: int) -> str:
+    key = hashlib.pbkdf2_hmac(
+        "sha256", password.encode(), username.lower().encode(), iterations
+    )
+    return hashlib.pbkdf2_hmac("sha256", key, password.encode(), 1).hex()
+
+
+def _encrypt_recovery_key(value: str, new_key: bytes) -> str:
+    rsa_key = RSA.import_key(bytes.fromhex(value))
+    encrypted = PKCS1_OAEP.new(rsa_key).encrypt(new_key)
+    return encrypted.hex()
 
 
 class AuthenticatedLastpass(lastpasslib.lastpasslib.Lastpass):
@@ -120,8 +162,8 @@ class Lastpass(AuthenticatedLastpass):
             lastpasslib.configuration.Configurations.secure_note_payload,
             **remote_payload,
         )
-        parsed_response = self._create_secret(  # type: ignore[arg-type]
-            lastpasslib.secrets.SecureNote, name, remote_payload
+        parsed_response = self._create_secret(
+            cast(Any, lastpasslib.secrets.SecureNote), name, remote_payload
         )
         result = parsed_response.find("result")
         secret_id = result.attrib.get("aid")
@@ -237,7 +279,7 @@ class LastpassClient:
         for name, (content, binary) in files.items():
             path = self._config_home / name
             if binary:
-                path.write_bytes(content)
+                path.write_bytes(cast(bytes, content))
             else:
                 path.write_text(content)
             path.chmod(0o600)
@@ -323,6 +365,135 @@ class LastpassClient:
         if secret is None:
             return False
         return cast(Lastpass, self.lastpass).share_secret(secret, email)
+
+    def change_password(self, current_password: str, new_password: str) -> None:
+        if len(new_password) < 8:
+            raise ValueError("Password must be at least 8 characters long.")
+
+        lastpass = cast(Lastpass, self.lastpass)
+        iterations = lastpass.iteration_count
+        old_key = hashlib.pbkdf2_hmac(
+            "sha256",
+            current_password.encode(),
+            lastpass.username.lower().encode(),
+            iterations,
+        )
+        old_hash_hex = _password_hash(lastpass.username, current_password, iterations)
+        new_key = hashlib.pbkdf2_hmac(
+            "sha256",
+            new_password.encode(),
+            lastpass.username.lower().encode(),
+            iterations,
+        )
+        info = self._get_password_change_info(lastpass, old_hash_hex)
+
+        encrypted_fields = []
+        required_failures = 0
+        for ciphertext, optional in info.fields:
+            try:
+                plaintext = _decrypt_password_change_value(ciphertext, old_key)
+            except (TypeError, ValueError):
+                if not optional:
+                    required_failures += 1
+                plaintext = " "
+            encrypted_fields.append(
+                f"{ciphertext}:{_encrypt_password_change_value(plaintext, new_key)}"
+            )
+        if required_failures > len(info.fields) // 10:
+            raise ValueError("Too many vault decryption failures.")
+
+        private_key = _decrypt_password_change_value(info.private_key, old_key)
+        new_private_key = _encrypt_password_change_value(private_key, new_key)
+        recovery_keys = {
+            f"suuid{index}": uid for index, (_, uid) in enumerate(info.recovery_keys)
+        }
+        recovery_keys.update(
+            {
+                f"sukey{index}": _encrypt_recovery_key(key, new_key)
+                for index, (key, _) in enumerate(info.recovery_keys)
+            }
+        )
+        payload = {
+            "cmd": "updatepassword",
+            "pwupdate": "1",
+            "email": lastpass.username,
+            "token": info.token,
+            "reencrypt": f"{info.reencrypt_id}\n" + "\n".join(encrypted_fields) + "\n",
+            "newprivatekeyenc": new_private_key,
+            "newuserkeyhexhash": _password_hash(
+                lastpass.username, new_password, iterations
+            ),
+            "newprivatekeyenchexhash": hashlib.sha256(
+                new_private_key.encode()
+            ).hexdigest(),
+            "newpasswordhash": _password_hash(
+                lastpass.username, new_password, iterations
+            ),
+            "key_iterations": str(iterations),
+            "encrypted_username": _encrypt_password_change_value(
+                lastpass.username, new_key
+            ),
+            "origusername": lastpass.username,
+            "wxhash": old_hash_hex,
+            "sukeycnt": str(len(info.recovery_keys)),
+            **recovery_keys,
+        }
+        response = lastpass.session.post(lastpass.api_endpoint, data=payload)
+        if not response.ok or "pwchangeok" not in response.text:
+            raise ValueError("Password change failed.")
+
+        lastpass._vault = Vault(
+            lastpass,
+            "",
+            key=new_key,
+            hash=_password_hash(lastpass.username, new_password, iterations).encode(),
+        )
+        lastpass._decrypted_vault = None
+        self._save_credentials(lastpass)
+
+    @staticmethod
+    def _get_password_change_info(
+        lastpass: Lastpass, old_hash: str
+    ) -> PasswordChangeInfo:
+        response = lastpass.session.post(
+            lastpass.api_endpoint,
+            data={
+                "cmd": "getacctschangepw",
+                "username": lastpass.username,
+                "hash": old_hash,
+                "changepw": "1",
+                "changepw2": "1",
+                "includersaprivatekeyenc": "1",
+                "changeun": "",
+                "resetrsakeys": "0",
+                "includeendmarker": "1",
+            },
+        )
+        if not response.ok:
+            response.raise_for_status()
+        root = ET.fromstring(response.content)
+        if root.attrib.get("rc") != "OK":
+            raise ValueError("Unable to start password change.")
+        data = root.find("data")
+        if data is None:
+            raise ValueError("Invalid password change response.")
+        lines = (data.attrib.get("xml") or "").splitlines()
+        if len(lines) < 2:
+            raise ValueError("Invalid password change response.")
+        fields = []
+        for line in lines[2:]:
+            if line == "endmarker" or not line:
+                break
+            ciphertext, _, marker = line.partition("\t")
+            fields.append((ciphertext, marker != "0"))
+        recovery_keys = []
+        for name, value in data.attrib.items():
+            match = re.fullmatch(r"sukey(\d+)", name)
+            if match and f"suuid{match.group(1)}" in data.attrib:
+                recovery_keys.append((value, data.attrib[f"suuid{match.group(1)}"]))
+        return PasswordChangeInfo(
+            data.attrib.get("token", ""), lines[0], lines[1], fields, recovery_keys
+        )
 
     def duplicate_secret(self, name_or_id: str, name: str | None = None) -> bool:
         secret = self._get_secret(name_or_id)

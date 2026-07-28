@@ -94,6 +94,28 @@ def test_logout_is_idempotent(monkeypatch, tmp_path: Path) -> None:
     assert result.output == "Logged out\n"
 
 
+def test_passwd_changes_master_password(monkeypatch) -> None:
+    class FakeClient:
+        def change_password(self, current_password, new_password):
+            assert (current_password, new_password) == ("old secret", "new secret")
+
+    monkeypatch.setattr(cli_module, "_get_lastpass", lambda ctx: FakeClient())
+    result = CliRunner().invoke(
+        cli, ["passwd"], input="old secret\nnew secret\nnew secret\n"
+    )
+
+    assert result.exit_code == 0
+    assert result.output.endswith("Password changed\n")
+
+
+def test_passwd_rejects_mismatched_passwords(monkeypatch) -> None:
+    monkeypatch.setattr(cli_module, "_get_lastpass", lambda ctx: object())
+    result = CliRunner().invoke(cli, ["passwd"], input="old\nnew secret\nother\n")
+
+    assert result.exit_code != 0
+    assert "Passwords do not match" in result.output
+
+
 def test_generate_password_does_not_require_credentials() -> None:
     result = CliRunner().invoke(cli, ["generate"])
 

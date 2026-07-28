@@ -42,6 +42,12 @@ Remove the saved session and vault keys from this machine:
 cd-lastpass-cli logout
 ```
 
+Change the LastPass master password and re-encrypt the vault:
+
+```sh
+cd-lastpass-cli passwd
+```
+
 Generate a secure random password:
 
 ```sh

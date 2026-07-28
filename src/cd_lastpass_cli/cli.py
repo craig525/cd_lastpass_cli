@@ -68,6 +68,23 @@ def logout() -> None:
     click.echo("Logged out")
 
 
+@cli.command("passwd")
+@click.pass_context
+def passwd(ctx: click.Context) -> None:
+    """Change the LastPass master password."""
+    client = _get_lastpass(ctx)
+    current_password = click.prompt("Current master password", hide_input=True)
+    new_password = click.prompt("New master password", hide_input=True)
+    confirmation = click.prompt("Confirm new master password", hide_input=True)
+    if new_password != confirmation:
+        raise click.ClickException("Passwords do not match.")
+    try:
+        client.change_password(current_password, new_password)
+    except ValueError as error:
+        raise click.ClickException(str(error)) from error
+    click.echo("Password changed")
+
+
 @cli.command("generate")
 @click.option(
     "--length",
