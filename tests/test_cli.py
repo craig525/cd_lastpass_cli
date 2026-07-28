@@ -182,6 +182,32 @@ def test_move_reports_failure(monkeypatch) -> None:
     assert "Could not move entry: Missing" in result.output
 
 
+def test_share_entry(monkeypatch) -> None:
+    class FakeClient:
+        def share_secret(self, name_or_id, email):
+            assert name_or_id == "Production SSH"
+            assert email == "user@example.com"
+            return True
+
+    monkeypatch.setattr(cli_module, "_get_lastpass", lambda ctx: FakeClient())
+    result = CliRunner().invoke(cli, ["share", "Production SSH", "user@example.com"])
+
+    assert result.exit_code == 0
+    assert result.output == "Production SSH\n"
+
+
+def test_share_reports_failure(monkeypatch) -> None:
+    class FakeClient:
+        def share_secret(self, name_or_id, email):
+            return False
+
+    monkeypatch.setattr(cli_module, "_get_lastpass", lambda ctx: FakeClient())
+    result = CliRunner().invoke(cli, ["share", "Missing", "user@example.com"])
+
+    assert result.exit_code != 0
+    assert "Could not share entry: Missing" in result.output
+
+
 def test_duplicate_entry(monkeypatch) -> None:
     class FakeClient:
         def duplicate_secret(self, name_or_id, name):

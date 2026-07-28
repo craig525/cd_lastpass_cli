@@ -154,6 +154,18 @@ class Lastpass(AuthenticatedLastpass):
             )
         return self.decrypted_vault.create_secret(local_payload["type"], local_payload)
 
+    def share_secret(self, secret, email: str) -> bool:
+        payload = {
+            "aid": secret.id,
+            "email": email,
+            "encuser": urllib.parse.quote(self.encrypted_username, safe=""),
+            "requesthash": urllib.parse.quote(self.encrypted_username, safe=""),
+            "sentms": f"{time.time_ns() // 1_000_000}",
+            "token": urllib.parse.quote(self.csrf_token, safe=""),
+        }
+        response = self.session.post(f"{self.host}/share.php", data=payload, timeout=5)
+        return response.ok
+
 
 class LastpassClient:
     _CREDENTIAL_FILES = (
@@ -305,6 +317,12 @@ class LastpassClient:
         if secret is None:
             return False
         return secret.move_to_folder(folder_path)
+
+    def share_secret(self, name_or_id: str, email: str) -> bool:
+        secret = self._get_secret(name_or_id)
+        if secret is None:
+            return False
+        return cast(Lastpass, self.lastpass).share_secret(secret, email)
 
     def duplicate_secret(self, name_or_id: str, name: str | None = None) -> bool:
         secret = self._get_secret(name_or_id)

@@ -113,6 +113,43 @@ def test_move_secret_returns_false_for_missing_entry() -> None:
     assert client.move_secret("Missing", "Archive") is False
 
 
+def test_share_secret_resolves_by_name_and_shares_with_email() -> None:
+    class Secret:
+        id = "123"
+
+    class Lastpass:
+        def get_secret_by_name(self, name):
+            assert name == "Production SSH"
+            return Secret()
+
+        def get_secret_by_id(self, secret_id):
+            raise AssertionError("ID lookup should not be needed")
+
+        def share_secret(self, secret, email):
+            assert secret.id == "123"
+            assert email == "user@example.com"
+            return True
+
+    client = LastpassClient.__new__(LastpassClient)
+    client.lastpass = cast(LastpassType, Lastpass())
+
+    assert client.share_secret("Production SSH", "user@example.com") is True
+
+
+def test_share_secret_returns_false_for_missing_entry() -> None:
+    class Lastpass:
+        def get_secret_by_name(self, name):
+            return None
+
+        def get_secret_by_id(self, secret_id):
+            return None
+
+    client = LastpassClient.__new__(LastpassClient)
+    client.lastpass = cast(LastpassType, Lastpass())
+
+    assert client.share_secret("Missing", "user@example.com") is False
+
+
 def test_duplicate_password_preserves_password_fields() -> None:
     class Secret(lastpasslib.secrets.Password):
         name = "Production"

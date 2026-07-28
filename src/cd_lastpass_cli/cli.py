@@ -165,6 +165,17 @@ def move(ctx: click.Context, name_or_id: str, folder_path: str) -> None:
     click.echo(name_or_id)
 
 
+@cli.command("share")
+@click.argument("name_or_id")
+@click.argument("email")
+@click.pass_context
+def share(ctx: click.Context, name_or_id: str, email: str) -> None:
+    """Share an entry with another LastPass user."""
+    if not _get_lastpass(ctx).share_secret(name_or_id, email):
+        raise click.ClickException(f"Could not share entry: {name_or_id}")
+    click.echo(name_or_id)
+
+
 @cli.command("duplicate")
 @click.argument("name_or_id")
 @click.option("--name", help="Name for the duplicate entry.")

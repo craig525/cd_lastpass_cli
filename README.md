@@ -92,6 +92,12 @@ Move an entry by name or ID to a different folder:
 cd-lastpass-cli move "Example Login" --folder="Personal\Infrastructure"
 ```
 
+Share an entry by name or ID with another LastPass user:
+
+```sh
+cd-lastpass-cli share "Example Login" user@example.com
+```
+
 Create entries with dynamically generated type-specific options. The available
 types and fields come from `lastpasslib`:
 
