@@ -228,7 +228,7 @@ class LastpassClient:
     ):
         self._config_home = self._get_config_home(os.environ)
         lastpass = None
-        if username and password and mfa:
+        if username and password:
             logger.info("Authenticating LastPass user {}", username)
             lastpass = authenticator(username, password, mfa)
         else:

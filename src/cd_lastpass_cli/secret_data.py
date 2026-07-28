@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 from collections.abc import Callable, Mapping
+from datetime import UTC, datetime
 from typing import Any
 
 import lastpasslib.datamodels
@@ -73,9 +74,23 @@ _SENSITIVE_FIELDS = {
 
 
 def _parse_shared_folder(value: Any) -> Any:
+    if isinstance(value, str):
+        parsed = {}
+        for line in value.splitlines():
+            key, separator, item = line.partition(":")
+            if not separator:
+                continue
+            item = item.strip()
+            if key in {"read_only", "deleted"}:
+                parsed[key] = item == "1"
+            elif key == "id":
+                parsed[key] = int(item)
+            elif key in {"created", "last_modified"}:
+                parsed[key] = datetime.fromisoformat(item).replace(tzinfo=UTC)
+            else:
+                parsed[key] = item
+        return parsed
     if not isinstance(value, lastpasslib.datamodels.SharedFolder):
-        if isinstance(value, str):
-            return value
         return value
 
     data = dataclasses.asdict(value)

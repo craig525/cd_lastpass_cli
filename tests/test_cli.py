@@ -516,7 +516,10 @@ def test_login_prompts_for_empty_password_and_mfa(monkeypatch) -> None:
 def test_login_saves_credentials(monkeypatch, tmp_path: Path) -> None:
     class FakeLastpass:
         def __init__(self, username, password, mfa):
-            pass
+            self.username = username
+            self._authenticated_response_data = {}
+            self.session = object()
+            self._vault = type("Vault", (), {"hash": b"hash", "key": b"key"})()
 
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setattr(cli_module, "Lastpass", FakeLastpass)
@@ -527,5 +530,6 @@ def test_login_saves_credentials(monkeypatch, tmp_path: Path) -> None:
     )
 
     assert result.exit_code == 0
-    assert load_credentials() == {"username": "user@example.com", "password": "secret"}
-    assert credential_file().stat().st_mode & 0o777 == 0o600
+    credential_file = tmp_path / ".lastpass-cli" / "_username"
+    assert credential_file.read_text() == '"user@example.com"'
+    assert credential_file.stat().st_mode & 0o777 == 0o600
