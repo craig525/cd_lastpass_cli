@@ -57,7 +57,8 @@ def test_create_ssh_key_reads_at_file_values(monkeypatch, tmp_path: Path) -> Non
     assert result.output == "Production SSH\n"
 
 
-def test_missing_credentials_is_reported() -> None:
+def test_missing_credentials_is_reported(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("LPASS_HOME", str(tmp_path))
     result = CliRunner().invoke(cli, ["status"])
 
     assert result.exit_code != 0
