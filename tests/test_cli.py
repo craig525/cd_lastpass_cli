@@ -499,6 +499,9 @@ def test_login_prompts_for_empty_password_and_mfa(monkeypatch) -> None:
             assert (username, password, mfa) == ("user@example.com", "secret", "123456")
 
     monkeypatch.setattr(cli_module, "Lastpass", FakeLastpass)
+    monkeypatch.setattr(
+        cli_module.LastpassClient, "_save_credentials", lambda *args: None
+    )
     result = CliRunner().invoke(
         cli,
         ["login", "--username", "user@example.com", "--password", "", "--mfa", ""],
