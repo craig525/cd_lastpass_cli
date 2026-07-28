@@ -137,6 +137,96 @@ def test_export_can_include_passwords_and_filter_by_group(
         ]
 
 
+def test_import_creates_passwords_from_lastpass_csv(
+    monkeypatch, tmp_path: Path
+) -> None:
+    created = []
+
+    class FakeClient:
+        def create_password(self, **fields):
+            created.append(fields)
+
+    monkeypatch.setattr(cli_module, "_get_lastpass", lambda ctx: FakeClient())
+    import_path = tmp_path / "vault.csv"
+    import_path.write_text(
+        "url,username,password,extra,name,grouping,fav\n"
+        "https://example.com,user,secret,notes,Example,Personal,1\n",
+        encoding="utf-8",
+    )
+
+    result = CliRunner().invoke(cli, ["import", str(import_path)])
+
+    assert result.exit_code == 0
+    assert result.output == "Imported 1 entries\n"
+    assert created == [
+        {
+            "name": "Example",
+            "url": "https://example.com",
+            "username": "user",
+            "password": "secret",
+            "notes": "notes",
+            "folder_path": "Personal",
+            "favorite": True,
+        }
+    ]
+
+
+def test_import_accepts_exported_csv_and_secure_notes(
+    monkeypatch, tmp_path: Path
+) -> None:
+    created = []
+
+    class FakeClient:
+        def create_password(self, **fields):
+            created.append(("password", fields))
+
+        def create_typed_secure_note(self, **fields):
+            created.append(("note", fields))
+
+    monkeypatch.setattr(cli_module, "_get_lastpass", lambda ctx: FakeClient())
+    import_path = tmp_path / "vault.csv"
+    import_path.write_text(
+        "url,username,password,extra,name,grouping,fav,type\n"
+        "https://example.com,user,secret,notes,Example,Personal,1,Login\n"
+        ",,,backup codes,Recovery,Personal,0,Secure Note\n",
+        encoding="utf-8",
+    )
+
+    result = CliRunner().invoke(cli, ["import", str(import_path)])
+
+    assert result.exit_code == 0
+    assert len(created) == 2
+    assert created[0][0] == "password"
+    assert created[1] == (
+        "note",
+        {
+            "name": "Recovery",
+            "note_type": "Generic",
+            "folder_path": "Personal",
+            "fields": {"Notes": "backup codes"},
+            "favorite": False,
+        },
+    )
+
+
+def test_import_rejects_invalid_rows_without_creating_entries(
+    monkeypatch, tmp_path: Path
+) -> None:
+    class FakeClient:
+        def create_password(self, **fields):
+            raise AssertionError("invalid CSV should not create entries")
+
+    monkeypatch.setattr(cli_module, "_get_lastpass", lambda ctx: FakeClient())
+    import_path = tmp_path / "vault.csv"
+    import_path.write_text("name,type\n,Password\nExample,Card\n", encoding="utf-8")
+
+    result = CliRunner().invoke(cli, ["import", str(import_path)])
+
+    assert result.exit_code != 0
+    assert "row 2: missing name" in result.output
+    assert "row 3: unsupported type" in result.output
+
+
 def test_logout_removes_saved_credentials(monkeypatch, tmp_path: Path) -> None:
     credential_files = [
         "_response_data",

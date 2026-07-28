@@ -169,6 +169,71 @@ def export_entries(
     click.echo(path)
 
 
+@cli.command("import")
+@click.argument(
+    "path", type=click.Path(exists=True, dir_okay=False, readable=True, path_type=Path)
+)
+@click.pass_context
+def import_entries(ctx: click.Context, path: Path) -> None:
+    """Import vault entries from a LastPass CSV file."""
+    rows = []
+    errors = []
+    try:
+        with path.open(newline="", encoding="utf-8-sig") as csv_file:
+            reader = csv.DictReader(csv_file)
+            if not reader.fieldnames or "name" not in reader.fieldnames:
+                raise click.ClickException("CSV must contain a name column.")
+            for row_number, row in enumerate(reader, start=2):
+                name = (row.get("name") or "").strip()
+                if not name:
+                    errors.append(f"row {row_number}: missing name")
+                    continue
+                if row.get("type", "") and row["type"].lower() not in {
+                    "password",
+                    "login",
+                    "secure note",
+                    "securenote",
+                }:
+                    errors.append(f"row {row_number}: unsupported type")
+                    continue
+                rows.append(row)
+    except OSError as error:
+        raise click.ClickException(f"Could not read CSV: {path}") from error
+
+    if errors:
+        raise click.ClickException("Invalid CSV: " + "; ".join(errors))
+
+    client = _get_lastpass(ctx)
+    for row in rows:
+        folder_path = row.get("grouping") or row.get("group") or None
+        row_type = (row.get("type") or "").strip().lower()
+        if row_type not in {"secure note", "securenote"} and (
+            row.get("url") is not None
+            or row.get("username") is not None
+            or row.get("password") is not None
+        ):
+            client.create_password(
+                name=row["name"],
+                url=row.get("url") or None,
+                username=row.get("username") or None,
+                password=row.get("password") or None,
+                notes=row.get("extra") or row.get("notes") or None,
+                folder_path=folder_path,
+                favorite=(row.get("fav") or row.get("is_favorite") or "").lower()
+                in {"1", "true", "yes", "on"},
+            )
+        else:
+            client.create_typed_secure_note(
+                name=row["name"],
+                note_type=row.get("note_type") or "Generic",
+                folder_path=folder_path,
+                fields={"Notes": row.get("extra") or row.get("notes") or ""},
+                favorite=(row.get("fav") or row.get("is_favorite") or "").lower()
+                in {"1", "true", "yes", "on"},
+            )
+    click.echo(f"Imported {len(rows)} entries")
+
+
 @cli.command("show")
 @click.argument("name")
 @click.option(

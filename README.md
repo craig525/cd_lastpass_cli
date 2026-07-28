@@ -91,6 +91,12 @@ cd-lastpass-cli export vault.csv
 cd-lastpass-cli export personal.csv --group Personal --password
 ```
 
+Import entries from a LastPass CSV export:
+
+```sh
+cd-lastpass-cli import vault.csv
+```
+
 Show an entry by name or ID:
 
 ```sh
