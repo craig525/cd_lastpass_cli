@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from cd_lastpass_cli.secret_data import process_secret_data, secret_data
+from cd_lastpass_cli.secret_data import all_subclasses, process_secret_data, secret_data
 
 
 def test_shared_folder_is_processed_into_structured_data() -> None:
@@ -26,3 +26,14 @@ def test_shared_folder_is_processed_into_structured_data() -> None:
         "last_modified": datetime(2026, 7, 21, 12, 29, 2, tzinfo=UTC),
         "sharer": "Shared-DevOps",
     }
+
+
+def test_secret_subclasses_are_discovered_recursively() -> None:
+    names = {
+        cls.__name__
+        for cls in all_subclasses(
+            __import__("lastpasslib.secrets", fromlist=["Secret"]).Secret
+        )
+    }
+
+    assert {"Password", "SecureNote", "SshKey", "WifiPassword"} <= names

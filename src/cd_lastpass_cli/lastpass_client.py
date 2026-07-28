@@ -3,12 +3,18 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
+import urllib.parse
 from collections.abc import Mapping
+from functools import partial
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import Any, NamedTuple, cast
 
 import dill as pickle
+import lastpasslib.configuration
+import lastpasslib.encryption
 import lastpasslib.lastpasslib
+import lastpasslib.secrets
 import requests
 from loguru import logger
 
@@ -70,6 +76,83 @@ class Lastpass(AuthenticatedLastpass):
         lastpass._decrypted_vault = None
         lastpass._vault = Vault(lastpass, "", key=vault_key, hash=vault_hash)
         return lastpass
+
+    def create_typed_secure_note(
+        self,
+        name: str,
+        note_type: str,
+        folder_path: str | None = None,
+        fields: Mapping[str, str] | None = None,
+        favorite: bool = False,
+    ) -> bool:
+        if (
+            note_type not in lastpasslib.secrets.SECRET_NOTE_CLASS_MAPPING
+            and note_type != "Generic"
+        ):
+            raise ValueError(f"Unknown secure note type: {note_type}")
+        base_folder = self._get_base_folder_by_path(folder_path or "")
+        grouping = self._get_grouping_by_folder_path(
+            folder_path or "", base_folder.is_personal
+        )
+        fields = dict(fields or {})
+        notes = "\n".join(
+            f"{field}:{value}" for field, value in fields.items() if value is not None
+        )
+        encrypt_and_encode = partial(
+            lastpasslib.encryption.EncryptManager.encrypt_and_encode_payload,
+            base_folder.encryption_key,
+        )
+        remote_payload = {
+            "encuser": urllib.parse.quote(self.encrypted_username, safe=""),
+            "extra": encrypt_and_encode(notes),
+            "fav": "on" if favorite else "",
+            "grouping": encrypt_and_encode(grouping),
+            "hexName": name.encode("utf-8").hex(),
+            "n": name.encode("utf-8").hex(),
+            "name": encrypt_and_encode(name),
+            "notetype": note_type,
+            "requesthash": urllib.parse.quote(self.encrypted_username, safe=""),
+            "sentms": f"{time.time_ns() // 1_000_000}",
+            "sharedfolderid": "" if base_folder.is_personal else base_folder.id,
+            "token": urllib.parse.quote(self.csrf_token, safe=""),
+        }
+        remote_payload = dict(
+            lastpasslib.configuration.Configurations.secure_note_payload,
+            **remote_payload,
+        )
+        parsed_response = self._create_secret(  # type: ignore[arg-type]
+            lastpasslib.secrets.SecureNote, name, remote_payload
+        )
+        result = parsed_response.find("result")
+        secret_id = result.attrib.get("aid")
+        if not secret_id:
+            raise lastpasslib.lastpasslib.UnknownAccountID
+        secret_class = lastpasslib.secrets.SECRET_NOTE_CLASS_MAPPING.get(
+            note_type, lastpasslib.secrets.SecureNote
+        )
+        local_payload = {
+            "type": secret_class,
+            "encryption_key": base_folder.encryption_key,
+            "is_favorite": favorite,
+            "group": grouping,
+            "group_id": base_folder.id,
+            "id": secret_id,
+            "name": name,
+            "note_type": note_type,
+            "notes": notes,
+            "created_gmt": int(time.time()),
+            "shared_folder_id": None if base_folder.is_personal else base_folder.id,
+        }
+        mapping = getattr(secret_class, "attribute_mapping", {})
+        if hasattr(mapping, "items"):
+            local_payload.update(
+                {
+                    attribute: fields[label]
+                    for label, attribute in mapping.items()
+                    if label in fields
+                }
+            )
+        return self.decrypted_vault.create_secret(local_payload["type"], local_payload)
 
 
 class LastpassClient:
@@ -190,3 +273,9 @@ class LastpassClient:
                 self.lastpass.get_secret_by_id(id_), include_password=include_password
             )
         )
+
+    def create_password(self, **fields: Any) -> bool:
+        return cast(Lastpass, self.lastpass).create_password(**fields)
+
+    def create_typed_secure_note(self, **fields: Any) -> bool:
+        return cast(Lastpass, self.lastpass).create_typed_secure_note(**fields)

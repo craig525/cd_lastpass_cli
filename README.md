@@ -65,6 +65,48 @@ cd-lastpass-cli show "Example Login"
 cd-lastpass-cli show 123456789 --json
 ```
 
+Create entries with dynamically generated type-specific options. The available
+types and fields come from `lastpasslib`:
+
+```sh
+cd-lastpass-cli create ssh-key \
+  --name "Production SSH" \
+  --hostname=prod.example.com \
+  --private-key=@id_ed25519
+```
+
+Create a generic secure note or password entry:
+
+```sh
+cd-lastpass-cli create secure-note --name "Recovery Codes" --notes "..."
+cd-lastpass-cli create password \
+  --name "Example Login" \
+  --url=https://example.com \
+  --username=user@example.com \
+  --password=secret
+```
+
+Use `--folder` to place an entry in a personal or shared-folder path:
+
+```sh
+cd-lastpass-cli create server \
+  --name "Production" \
+  --folder="Personal\Infrastructure" \
+  --hostname=prod.example.com
+```
+
+Values beginning with `@` are read from a file, which supports multiline
+fields such as private keys:
+
+```sh
+cd-lastpass-cli create ssh-key \
+  --name "Production SSH" \
+  --private-key=@~/.ssh/id_ed25519
+```
+
+Run `cd-lastpass-cli create --help` to list available entry types and
+`cd-lastpass-cli create <type> --help` to list fields for a specific type.
+
 Passwords are omitted by default. Include one explicitly when needed:
 
 ```sh

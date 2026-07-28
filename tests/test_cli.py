@@ -22,6 +22,40 @@ def test_help_exposes_auto_envvar_prefix() -> None:
     assert "LPASS_USERNAME" in result.output
 
 
+def test_create_ssh_key_help_has_dynamic_field_options() -> None:
+    result = CliRunner().invoke(cli, ["create", "ssh-key", "--help"])
+
+    assert result.exit_code == 0
+    assert "--hostname" in result.output
+    assert "--private-key" in result.output
+
+
+def test_create_ssh_key_reads_at_file_values(monkeypatch, tmp_path: Path) -> None:
+    class FakeClient:
+        def create_typed_secure_note(self, **fields):
+            assert fields["note_type"] == "SSH Key"
+            assert fields["fields"]["Private Key"] == "private key\n"
+
+    key_path = tmp_path / "id_ed25519"
+    key_path.write_text("private key\n")
+    monkeypatch.setattr(cli_module, "_get_lastpass", lambda ctx: FakeClient())
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "create",
+            "ssh-key",
+            "--name",
+            "Production SSH",
+            "--hostname=prod.example.com",
+            f"--private-key=@{key_path}",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert result.output == "Production SSH\n"
+
+
 def test_missing_credentials_is_reported() -> None:
     result = CliRunner().invoke(cli, ["status"])
 

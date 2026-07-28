@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 import json
+import re
+from pathlib import Path
+from typing import Any
 
 import click
+import lastpasslib.secrets
 
 from .exceptions import InvalidLastpassClientParams
 from .lastpass_client import AuthenticatedLastpass, LastpassClient
 from .logging_config import configure_logging
+from .secret_data import all_subclasses
 
 Lastpass = AuthenticatedLastpass
 
@@ -102,6 +107,124 @@ def show(ctx: click.Context, name: str, include_password: bool, as_json: bool) -
         return
     for key, value in secret.items():
         click.echo(f"{key}: {value}")
+
+
+def _command_name(value: str) -> str:
+    value = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1-\2", value)
+    value = re.sub(r"([a-z0-9])([A-Z])", r"\1-\2", value)
+    return re.sub(r"[^a-zA-Z0-9]+", "-", value).strip("-").lower()
+
+
+def _field_option_name(label: str) -> str:
+    return _command_name(label)
+
+
+def _read_at_value(value: str) -> str:
+    if not value.startswith("@"):
+        return value
+    try:
+        return Path(value[1:]).read_text()
+    except OSError as error:
+        raise click.ClickException(f"Could not read field file {value[1:]}") from error
+
+
+@cli.group("create")
+def create() -> None:
+    """Create a vault entry."""
+
+
+@create.command("password")
+@click.option("--name", required=True)
+@click.option("--folder", "folder_path")
+@click.option("--url")
+@click.option("--username")
+@click.option("--password", hide_input=True)
+@click.option("--totp")
+@click.option("--notes")
+@click.option("--favorite", is_flag=True)
+@click.pass_context
+def create_password(
+    ctx: click.Context,
+    name: str,
+    folder_path: str | None,
+    url: str | None,
+    username: str | None,
+    password: str | None,
+    totp: str | None,
+    notes: str | None,
+    favorite: bool,
+) -> None:
+    """Create a password entry."""
+    _get_lastpass(ctx).create_password(
+        name=name,
+        folder_path=folder_path,
+        url=url,
+        username=username,
+        password=password,
+        totp=totp,
+        notes=notes,
+        favorite=favorite,
+    )
+    click.echo(name)
+
+
+def _create_secure_note_command(note_type: str, field_labels: dict[str, str]):
+    def command(ctx: click.Context, **kwargs: Any) -> None:
+        fields = {
+            field_labels[field]: _read_at_value(value)
+            for field, value in kwargs.items()
+            if field in field_labels and value is not None
+        }
+        folder_path = kwargs.pop("folder_path")
+        favorite = kwargs.pop("favorite")
+        name = kwargs.pop("name")
+        _get_lastpass(ctx).create_typed_secure_note(
+            name=name,
+            note_type=note_type,
+            folder_path=folder_path,
+            fields=fields,
+            favorite=favorite,
+        )
+        click.echo(name)
+
+    command.__name__ = f"create_{_command_name(note_type)}"
+    command.__doc__ = f"Create a {note_type} secure note."
+    decorated = click.pass_context(command)
+    for field in reversed(field_labels):
+        option_name = _field_option_name(field)
+        decorated = click.option(f"--{option_name}", option_name.replace("-", "_"))(
+            decorated
+        )
+    decorated = click.option("--favorite", is_flag=True)(decorated)
+    decorated = click.option("--folder", "folder_path")(decorated)
+    decorated = click.option("--name", required=True)(decorated)
+    return click.command(_command_name(note_type))(decorated)
+
+
+_note_types = {"SecureNote": "Generic"}
+_note_types.update(
+    {
+        secret_type.__name__: note_type
+        for note_type, secret_type in lastpasslib.secrets.SECRET_NOTE_CLASS_MAPPING.items()
+    }
+)
+for _secret_type in [
+    lastpasslib.secrets.SecureNote,
+    *all_subclasses(lastpasslib.secrets.SecureNote),
+]:
+    if _secret_type.__name__ == "Generic":
+        continue
+    _note_type = _note_types.get(_secret_type.__name__)
+    if _note_type is None:
+        continue
+    _mapping = getattr(_secret_type, "attribute_mapping", {})
+    if not hasattr(_mapping, "items"):
+        _mapping = {}
+    _labels = {_field_option_name(label).replace("-", "_"): label for label in _mapping}
+    command = _create_secure_note_command(_note_type, _labels)
+    if _secret_type is lastpasslib.secrets.SecureNote:
+        command.name = "secure-note"
+    create.add_command(command)
 
 
 def main() -> None:

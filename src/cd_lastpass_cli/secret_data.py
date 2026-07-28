@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Any
 
 import lastpasslib.datamodels
@@ -36,14 +36,26 @@ _FIELDS = {
 }
 
 
+def all_subclasses(cls: type) -> list[type]:
+    subclasses = []
+    for subclass in cls.__subclasses__():
+        subclasses.append(subclass)
+        subclasses.extend(all_subclasses(subclass))
+    return subclasses
+
+
+def secret_note_mappings() -> dict[str, Mapping[str, str]]:
+    mappings = {}
+    for secret_type in all_subclasses(lastpasslib.secrets.SecureNote):
+        mapping = getattr(secret_type, "attribute_mapping", {})
+        if isinstance(mapping, Mapping):
+            mappings[secret_type.__name__] = mapping
+    return mappings
+
+
 def _add_secret_note_attributes():
-    for value in dir(lastpasslib.secrets):
-        k = getattr(lastpasslib.secrets, str(value))
-        mapping = getattr(k, "attribute_mapping", {})
-        if hasattr(mapping, "values"):
-            v = mapping.values()
-            # logger.info(f'{value}: {v}')
-            _FIELDS.update(v)
+    for mapping in secret_note_mappings().values():
+        _FIELDS.update(mapping.values())
 
 
 _add_secret_note_attributes()
@@ -62,6 +74,8 @@ _SENSITIVE_FIELDS = {
 
 def _parse_shared_folder(value: Any) -> Any:
     if not isinstance(value, lastpasslib.datamodels.SharedFolder):
+        if isinstance(value, str):
+            return value
         return value
 
     data = dataclasses.asdict(value)
