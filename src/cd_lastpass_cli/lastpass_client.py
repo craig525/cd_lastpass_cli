@@ -301,12 +301,50 @@ class LastpassClient:
         return secret.delete()
 
     def move_secret(self, name_or_id: str, folder_path: str) -> bool:
-        secret = self.lastpass.get_secret_by_name(name_or_id)
-        if secret is None:
-            secret = self.lastpass.get_secret_by_id(name_or_id)
+        secret = self._get_secret(name_or_id)
         if secret is None:
             return False
         return secret.move_to_folder(folder_path)
+
+    def duplicate_secret(self, name_or_id: str, name: str | None = None) -> bool:
+        secret = self._get_secret(name_or_id)
+        if secret is None:
+            return False
+        name = name or f"Copy of {secret.name}"
+        folder_path = secret.full_path or None
+        if isinstance(secret, lastpasslib.secrets.Password):
+            return self.create_password(
+                name=name,
+                url=secret.url,
+                folder_path=folder_path,
+                username=secret.username,
+                password=secret.password,
+                totp=secret.mfa_seed,
+                notes=secret.notes,
+                pwprotect=secret.is_password_protected,
+                auto_login=secret.auto_login,
+                autofill=not secret.never_autofill,
+                favorite=secret.is_favorite,
+            )
+        note_type = getattr(secret, "_data", {}).get("note_type") or "Generic"
+        mapping = getattr(secret, "attribute_mapping", {})
+        fields = {
+            label: getattr(secret, attribute, None)
+            for label, attribute in mapping.items()
+        }
+        if not mapping:
+            fields["Notes"] = secret.notes
+        return self.create_typed_secure_note(
+            name=name,
+            note_type=note_type,
+            folder_path=folder_path,
+            fields=fields,
+            favorite=secret.is_favorite,
+        )
+
+    def _get_secret(self, name_or_id: str):
+        secret = self.lastpass.get_secret_by_name(name_or_id)
+        return secret or self.lastpass.get_secret_by_id(name_or_id)
 
     def create_password(self, **fields: Any) -> bool:
         return cast(Lastpass, self.lastpass).create_password(**fields)

@@ -165,6 +165,18 @@ def move(ctx: click.Context, name_or_id: str, folder_path: str) -> None:
     click.echo(name_or_id)
 
 
+@cli.command("duplicate")
+@click.argument("name_or_id")
+@click.option("--name", help="Name for the duplicate entry.")
+@click.pass_context
+def duplicate(ctx: click.Context, name_or_id: str, name: str | None) -> None:
+    """Duplicate an entry by name or ID."""
+    duplicate_name = name or f"Copy of {name_or_id}"
+    if not _get_lastpass(ctx).duplicate_secret(name_or_id, name):
+        raise click.ClickException(f"Entry not found: {name_or_id}")
+    click.echo(duplicate_name)
+
+
 def _command_name(value: str) -> str:
     value = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1-\2", value)
     value = re.sub(r"([a-z0-9])([A-Z])", r"\1-\2", value)

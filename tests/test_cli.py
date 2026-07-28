@@ -182,6 +182,34 @@ def test_move_reports_failure(monkeypatch) -> None:
     assert "Could not move entry: Missing" in result.output
 
 
+def test_duplicate_entry(monkeypatch) -> None:
+    class FakeClient:
+        def duplicate_secret(self, name_or_id, name):
+            assert name_or_id == "Production SSH"
+            assert name == "Backup SSH"
+            return True
+
+    monkeypatch.setattr(cli_module, "_get_lastpass", lambda ctx: FakeClient())
+    result = CliRunner().invoke(
+        cli, ["duplicate", "Production SSH", "--name", "Backup SSH"]
+    )
+
+    assert result.exit_code == 0
+    assert result.output == "Backup SSH\n"
+
+
+def test_duplicate_reports_missing_entry(monkeypatch) -> None:
+    class FakeClient:
+        def duplicate_secret(self, name_or_id, name):
+            return False
+
+    monkeypatch.setattr(cli_module, "_get_lastpass", lambda ctx: FakeClient())
+    result = CliRunner().invoke(cli, ["duplicate", "Missing"])
+
+    assert result.exit_code != 0
+    assert "Entry not found: Missing" in result.output
+
+
 def test_status_accepts_credentials_from_environment(monkeypatch) -> None:
     class FakeLastpass:
         def __init__(self, username, password, mfa):
