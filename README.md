@@ -199,3 +199,38 @@ uv run pytest
 uv run ruff check .
 uv run ty check
 ```
+
+### Publishing
+
+Update the package version before each release. This updates `pyproject.toml`
+and the lockfile:
+
+```sh
+uv version 0.2.0
+```
+
+Run the checks, build the source distribution and wheel, and inspect the
+artifacts:
+
+```sh
+uv run ruff check .
+uv run ty check
+uv run pytest
+uv build --no-sources
+ls dist/
+```
+
+Publish the artifacts to PyPI with a PyPI API token. Keep the token out of the
+repository and shell history by exporting it through the environment:
+
+```sh
+export UV_PUBLISH_TOKEN=pypi-...
+uv publish
+```
+
+After publishing, verify that the package can be installed from PyPI:
+
+```sh
+uv tool install --refresh cd-lastpass-cli
+lastpass --help
+```
