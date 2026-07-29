@@ -1,4 +1,4 @@
-## cd-lastpass-cli
+## lastpass
 
 A small command-line interface for authenticating to LastPass and inspecting
 vault entries.
@@ -17,7 +17,7 @@ For development, create the project environment and install the dependencies:
 
 ```sh
 uv sync
-uv run cd-lastpass-cli --help
+uv run lastpass --help
 ```
 
 ### Login
@@ -26,12 +26,12 @@ Provide the username and password as options or environment variables. If the
 password or MFA code is omitted, the CLI prompts for it.
 
 ```sh
-cd-lastpass-cli login --username user@example.com
+lastpass login --username user@example.com
 ```
 
 ```sh
 LPASS_USERNAME=user@example.com LPASS_PASSWORD=secret LPASS_MFA=123456 \
-  cd-lastpass-cli login
+  lastpass login
 ```
 
 The MFA value is used only during login and is not saved.
@@ -39,20 +39,20 @@ The MFA value is used only during login and is not saved.
 Remove the saved session and vault keys from this machine:
 
 ```sh
-cd-lastpass-cli logout
+lastpass logout
 ```
 
 Change the LastPass master password and re-encrypt the vault:
 
 ```sh
-cd-lastpass-cli passwd
+lastpass passwd
 ```
 
 Generate a secure random password:
 
 ```sh
-cd-lastpass-cli generate
-cd-lastpass-cli generate --length 32
+lastpass generate
+lastpass generate --length 32
 ```
 
 ### Commands
@@ -60,75 +60,75 @@ cd-lastpass-cli generate --length 32
 Check the saved session:
 
 ```sh
-cd-lastpass-cli status
+lastpass status
 ```
 
 Synchronize the local vault with LastPass:
 
 ```sh
-cd-lastpass-cli sync
+lastpass sync
 ```
 
 List vault entries by name:
 
 ```sh
-cd-lastpass-cli ls
+lastpass ls
 ```
 
 Filter entries by group, include IDs, or return JSON:
 
 ```sh
-cd-lastpass-cli ls --group Personal
-cd-lastpass-cli ls --long
-cd-lastpass-cli ls --json
+lastpass ls --group Personal
+lastpass ls --long
+lastpass ls --json
 ```
 
 Export vault entries to CSV. Passwords are omitted unless `--password` is
 explicitly provided:
 
 ```sh
-cd-lastpass-cli export vault.csv
-cd-lastpass-cli export personal.csv --group Personal --password
+lastpass export vault.csv
+lastpass export personal.csv --group Personal --password
 ```
 
 Import entries from a LastPass CSV export:
 
 ```sh
-cd-lastpass-cli import vault.csv
+lastpass import vault.csv
 ```
 
 Show an entry by name or ID:
 
 ```sh
-cd-lastpass-cli show "Example Login"
-cd-lastpass-cli show 123456789 --json
+lastpass show "Example Login"
+lastpass show 123456789 --json
 ```
 
 Delete an entry by name or ID. Deletion requires confirmation unless `--yes` is
 provided:
 
 ```sh
-cd-lastpass-cli delete "Example Login"
-cd-lastpass-cli delete 123456789 --yes
+lastpass delete "Example Login"
+lastpass delete 123456789 --yes
 ```
 
 Move an entry by name or ID to a different folder:
 
 ```sh
-cd-lastpass-cli move "Example Login" --folder="Personal\Infrastructure"
+lastpass move "Example Login" --folder="Personal\Infrastructure"
 ```
 
 Share an entry by name or ID with another LastPass user:
 
 ```sh
-cd-lastpass-cli share "Example Login" user@example.com
+lastpass share "Example Login" user@example.com
 ```
 
 Create entries with dynamically generated type-specific options. The available
 types and fields come from `lastpasslib`:
 
 ```sh
-cd-lastpass-cli create ssh-key \
+lastpass create ssh-key \
   --name "Production SSH" \
   --hostname=prod.example.com \
   --private-key=@id_ed25519
@@ -137,8 +137,8 @@ cd-lastpass-cli create ssh-key \
 Create a generic secure note or password entry:
 
 ```sh
-cd-lastpass-cli create secure-note --name "Recovery Codes" --notes "..."
-cd-lastpass-cli create password \
+lastpass create secure-note --name "Recovery Codes" --notes "..."
+lastpass create password \
   --name "Example Login" \
   --url=https://example.com \
   --username=user@example.com \
@@ -148,7 +148,7 @@ cd-lastpass-cli create password \
 Use `--folder` to place an entry in a personal or shared-folder path:
 
 ```sh
-cd-lastpass-cli create server \
+lastpass create server \
   --name "Production" \
   --folder="Personal\Infrastructure" \
   --hostname=prod.example.com
@@ -158,18 +158,18 @@ Values beginning with `@` are read from a file, which supports multiline
 fields such as private keys:
 
 ```sh
-cd-lastpass-cli create ssh-key \
+lastpass create ssh-key \
   --name "Production SSH" \
   --private-key=@~/.ssh/id_ed25519
 ```
 
-Run `cd-lastpass-cli create --help` to list available entry types and
-`cd-lastpass-cli create <type> --help` to list fields for a specific type.
+Run `lastpass create --help` to list available entry types and
+`lastpass create <type> --help` to list fields for a specific type.
 
 Passwords are omitted by default. Include one explicitly when needed:
 
 ```sh
-cd-lastpass-cli show "Example Login" --password
+lastpass show "Example Login" --password
 ```
 
 ### Configuration and credentials
@@ -178,7 +178,7 @@ The default private data directory is `~/.lastpass-cli`. Set `LPASS_HOME` to
 use another directory:
 
 ```sh
-LPASS_HOME=/path/to/private-directory cd-lastpass-cli status
+LPASS_HOME=/path/to/private-directory lastpass status
 ```
 
 After a successful login, the CLI saves the authenticated session and vault

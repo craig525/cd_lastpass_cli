@@ -2,7 +2,7 @@
 
 ## Project Shape
 
-- This is a single Python package under `src/cd_lastpass_cli`; the console entrypoint is `cd-lastpass-cli = cd_lastpass_cli:main` in `pyproject.toml`.
+- This is a single Python package under `src/cd_lastpass_cli`; the console entrypoint is `lastpass = cd_lastpass_cli:main` in `pyproject.toml`.
 - The CLI wraps `lastpasslib` and persists reusable session and vault key material under `LPASS_HOME` or `~/.lastpass-cli`; never use real credentials or a real LastPass home for tests.
 - `login` authenticates and writes saved credentials; `status`, `ls`, and `show` reload them. `show` omits passwords unless `--password` is explicitly passed.
 
