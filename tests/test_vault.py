@@ -1,3 +1,7 @@
+from unittest.mock import Mock
+
+import pytest
+
 from cd_lastpass_cli.vault import Vault
 
 
@@ -55,3 +59,67 @@ def test_parse_secure_note_handles_multiline_value_after_empty_value() -> None:
     assert parsed["private_key"] == (
         "-----BEGIN PRIVATE KEY-----\nkey contents\n-----END PRIVATE KEY-----"
     )
+
+
+def test_parse_secure_note_adds_custom_attribute_mapping() -> None:
+    data = {
+        "name": "Custom note",
+        "note_type": "Custom note",
+        "custom_note_definition_json": '{"fields": [{"text": "Account"}, {"text": "Details"}]}',
+        "notes": "Account:one\nDetails:two",
+    }
+
+    class_type, parsed = Vault._parse_secure_note(data)
+
+    assert class_type.__name__ == "Custom"
+    assert parsed["custom_attribute_mapping"] == {
+        "Account": "account",
+        "Details": "details",
+    }
+
+
+def test_parse_secure_note_rejects_missing_notes() -> None:
+    data = {"name": "Corrupt note", "note_type": "SSH Key"}
+
+    with pytest.raises(AttributeError):
+        Vault._parse_secure_note(data)
+
+
+@pytest.mark.parametrize(
+    ("data", "expected"),
+    [
+        ({"is_secure_note": False, "url": "http://group"}, "FolderEntry"),
+        (
+            {"is_secure_note": False, "url": "https://example.com", "name": "Entry"},
+            "Password",
+        ),
+    ],
+)
+def test_parse_secret_type_classifies_folder_and_password(
+    monkeypatch, data, expected
+) -> None:
+    monkeypatch.setattr(
+        Vault, "_get_attribute_payload_data", Mock(return_value=data.copy())
+    )
+    monkeypatch.setattr(Vault, "_transform_data_attributes", Mock(return_value={}))
+
+    class_type, parsed = Vault._parse_secret_type(b"payload", b"key")
+
+    assert class_type.__name__ == expected
+    assert parsed["encryption_key"] == b"key"
+
+
+def test_parse_secret_type_delegates_secure_notes(monkeypatch) -> None:
+    data = {"is_secure_note": True, "name": "Note"}
+    monkeypatch.setattr(
+        Vault, "_get_attribute_payload_data", Mock(return_value=data.copy())
+    )
+    monkeypatch.setattr(Vault, "_transform_data_attributes", Mock(return_value={}))
+    parsed = (object, {"parsed": True})
+    parse_secure_note = Mock(return_value=parsed)
+    monkeypatch.setattr(Vault, "_parse_secure_note", parse_secure_note)
+
+    result = Vault._parse_secret_type(b"payload", b"key")
+
+    assert result == parsed
+    parse_secure_note.assert_called_once()
